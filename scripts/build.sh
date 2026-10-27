@@ -1,10 +1,13 @@
 #!/bin/bash
+
 set -e                  # exit on error
 set -o pipefail         # exit on pipeline error
 set -u                  # treat unset variable as error
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
 CMD=(setup_host debootstrap run_chroot build_iso)
+
 DATE=`TZ="UTC" date +"%y%m%d-%H%M%S"`
 
 function help() {
@@ -62,6 +65,7 @@ function check_host() {
     if [[ -z "$os_ver" ]]; then
         echo "WARNING : OS is not Debian or Ubuntu and is untested"
     fi
+
     if [ $(id -u) -eq 0 ]; then
         echo "This script should not be run as 'root'"
         exit 1
@@ -84,6 +88,7 @@ function load_config() {
 function check_config() {
     local expected_config_version
     expected_config_version="0.4"
+
     if [[ "$CONFIG_FILE_VERSION" != "$expected_config_version" ]]; then
         >&2 echo "Invalid or old config version $CONFIG_FILE_VERSION, expected $expected_config_version. Please update your configuration file from the default."
         exit 1
@@ -104,35 +109,35 @@ function debootstrap() {
 
 function run_chroot() {
     echo "=====> running run_chroot ..."
-    
+
     chroot_enter_setup
-    
+
     # Setup build scripts in chroot environment
     sudo ln -f $SCRIPT_DIR/chroot_build.sh chroot/root/chroot_build.sh
     sudo ln -f $SCRIPT_DIR/default_config.sh chroot/root/default_config.sh
     if [[ -f "$SCRIPT_DIR/config.sh" ]]; then
         sudo ln -f $SCRIPT_DIR/config.sh chroot/root/config.sh
     fi
-    
+
     # Launch into chroot environment to build install image.
     sudo chroot chroot /usr/bin/env DEBIAN_FRONTEND=${DEBIAN_FRONTEND:-readline} /root/chroot_build.sh -
-    
+
     # Cleanup after image changes
     sudo rm -f chroot/root/chroot_build.sh
     sudo rm -f chroot/root/default_config.sh
     if [[ -f "chroot/root/config.sh" ]]; then
         sudo rm -f chroot/root/config.sh
     fi
-    
+
     chroot_exit_teardown
 }
 
 function build_iso() {
     echo "=====> running build_iso ..."
-    
+
     # move image artifacts
     sudo mv chroot/image .
-    
+
     # compress rootfs
     sudo mksquashfs chroot image/casper/filesystem.squashfs \
         -noappend -no-duplicates -no-recovery \
@@ -144,12 +149,12 @@ function build_iso() {
         -e "tmp/*" \
         -e "tmp/.*" \
         -e "swapfile"
-        
+
     # write the filesystem.size
     printf $(sudo du -sx --block-size=1 chroot | cut -f1) | sudo tee image/casper/filesystem.size
-    
+
     pushd $SCRIPT_DIR/image
-    
+
     sudo xorriso \
         -as mkisofs \
         -iso-level 3 \
@@ -157,34 +162,34 @@ function build_iso() {
         -J -J -joliet-long \
         -volid "$TARGET_NAME" \
         -output "$SCRIPT_DIR/$TARGET_NAME.iso" \
-        -eltorito-boot isolinux/bios.img \
-          -no-emul-boot \
-          -boot-load-size 4 \
-          -boot-info-table \
-          --eltorito-catalog boot.catalog \
-          --grub2-boot-info \
-          --grub2-mbr ../chroot/usr/lib/grub/i386-pc/boot_hybrid.img \
+      -eltorito-boot isolinux/bios.img \
+        -no-emul-boot \
+        -boot-load-size 4 \
+        -boot-info-table \
+        --eltorito-catalog boot.catalog \
+        --grub2-boot-info \
+        --grub2-mbr ../chroot/usr/lib/grub/i386-pc/boot_hybrid.img \
         -partition_offset 16 \
-          --mbr-force-bootable \
-        -eltorito-alt-boot \
-          -no-emul-boot \
-          -e isolinux/efiboot.img \
-          -append_partition 2 28732ac11ff8d211ba4b00a0c93ec93b isolinux/efiboot.img \
-          -appended_part_as_gpt \
-          -iso_mbr_part_type a2a0d0ebe5b9334487c068b6b72699c7 \
-          -m "isolinux/efiboot.img" \
-          -m "isolinux/bios.img" \
-          -e '--interval:appended_partition_2:::' \
-        -exclude isolinux \
-        -graft-points \
-           "/EFI/boot/bootx64.efi=isolinux/bootx64.efi" \
-           "/EFI/boot/mmx64.efi=isolinux/mmx64.efi" \
-           "/EFI/boot/grubx64.efi=isolinux/grubx64.efi" \
-           "/EFI/ubuntu/grub.cfg=isolinux/grub.cfg" \
-           "/isolinux/bios.img=isolinux/bios.img" \
-           "/isolinux/efiboot.img=isolinux/efiboot.img" \
-           "."
-           
+        --mbr-force-bootable \
+      -eltorito-alt-boot \
+        -no-emul-boot \
+        -e isolinux/efiboot.img \
+        -append_partition 2 28732ac11ff8d211ba4b00a0c93ec93b isolinux/efiboot.img \
+        -appended_part_as_gpt \
+        -iso_mbr_part_type a2a0d0ebe5b9334487c068b6b72699c7 \
+        -m "isolinux/efiboot.img" \
+        -m "isolinux/bios.img" \
+        -e '--interval:appended_partition_2:::' \
+      -exclude isolinux \
+      -graft-points \
+         "/EFI/boot/bootx64.efi=isolinux/bootx64.efi" \
+         "/EFI/boot/mmx64.efi=isolinux/mmx64.efi" \
+         "/EFI/boot/grubx64.efi=isolinux/grubx64.efi" \
+         "/EFI/ubuntu/grub.cfg=isolinux/grub.cfg" \
+         "/isolinux/bios.img=isolinux/bios.img" \
+         "/isolinux/efiboot.img=isolinux/efiboot.img" \
+         "."
+
     popd
 }
 
