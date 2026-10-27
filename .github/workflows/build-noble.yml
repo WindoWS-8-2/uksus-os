@@ -2,7 +2,7 @@ name: build-noble
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, uksus-branding ]
   pull_request:
     branches: [ master ]
   workflow_dispatch:
@@ -10,19 +10,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v6
-
+      - uses: actions/checkout@v4
+      
       - name: Build
         run: |
           cd scripts
           sed -i -E 's/TARGET_UBUNTU_VERSION=(.*)/TARGET_UBUNTU_VERSION="noble"/g' default_config.sh
           ./build.sh -
+          
       - name: Archive artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ubuntu-from-scratch
+          name: uksus-os
           path: |
-            scripts/ubuntu-from-scratch.iso
+            scripts/uksus-os.iso
             scripts/image/md5sum.txt
