@@ -52,20 +52,20 @@ function customize_image() {
         mythes-ru \
         hyphen-ru
 
-    # useful tools
+    # User-friendly applications (NO dev tools)
     apt-get install -y \
-        clamav-daemon \
-        terminator \
-        apt-transport-https \
-        curl \
-        vim \
-        nano \
-        less
+        firefox \
+        gnome-calculator \
+        gnome-text-editor \
+        eog \
+        evince \
+        file-roller \
+        gnome-system-monitor
 
     # Set Russian locale as default
     update-locale LANG=ru_RU.UTF-8 LANGUAGE=ru:en LC_ALL=ru_RU.UTF-8
 
-    # purge
+    # purge unnecessary packages
     apt-get purge -y \
         transmission-gtk \
         transmission-common \
