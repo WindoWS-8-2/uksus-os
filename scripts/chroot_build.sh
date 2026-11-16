@@ -7,7 +7,7 @@ CMD=(setup_host install_pkg build_image finish_up)
 
 function help() {
     if [ -z ${1+x} ]; then
-        echo -e "This script builds Uksus OS from scratch"
+        echo -e "This script builds RisOS 26.27 from scratch"
         echo -e
     else
         echo -e $1
@@ -57,13 +57,13 @@ deb $TARGET_UBUNTU_MIRROR $TARGET_UBUNTU_VERSION-updates main restricted univers
 deb-src $TARGET_UBUNTU_MIRROR $TARGET_UBUNTU_VERSION-updates main restricted universe multiverse
 EOF
     echo "$TARGET_NAME" > /etc/hostname
-    
+
     apt-get update
     apt-get install -y libterm-readline-gnu-perl systemd-sysv
-    
+
     dbus-uuidgen > /etc/machine-id
     ln -fs /etc/machine-id /var/lib/dbus/machine-id
-    
+
     dpkg-divert --local --rename --add /sbin/initctl
     ln -s /bin/true /sbin/initctl
 }
@@ -82,7 +82,7 @@ function load_config() {
 function install_pkg() {
     echo "=====> running install_pkg ... will take a long time ..."
     apt-get -y upgrade
-    
+
     # install live packages + wget for theme downloading
     apt-get install -y \
         sudo \
@@ -131,9 +131,16 @@ function install_pkg() {
     # Call into config function
     customize_image
 
+    # === RisOS Branding in Ubiquity Slideshow ===
+    SLIDESHOW_DIR="/usr/share/ubiquity-slideshow/slides/ubuntu"
+    if [ -d "$SLIDESHOW_DIR" ]; then
+        find "$SLIDESHOW_DIR" -name "*.html" -exec sed -i 's/Ubuntu/RisOS 26.27/g' {} \;
+        find "$SLIDESHOW_DIR" -name "*.html" -exec sed -i 's/ubuntu/risos/g' {} \;
+    fi
+
     # remove unused and clean up apt cache
     apt-get autoremove -y
-    
+
     # final touch
     dpkg-reconfigure locales
 
@@ -157,10 +164,10 @@ function build_image() {
     mkdir -p /image/{casper,isolinux,install}
     pushd /image
 
-    # === GRUB THEME INSTALLATION ===
+    # === GRUB THEME INSTALLATION (Vimix) ===
     echo "=====> Installing GRUB theme Vimix ..."
     mkdir -p /boot/grub/themes/vimix
-    
+
     if wget -q --timeout=30 https://github.com/VandalByte/grub-theme-vimix/archive/refs/heads/master.tar.gz -O /tmp/vimix.tar.gz; then
         tar xzf /tmp/vimix.tar.gz -C /tmp/ --strip-components=1 2>/dev/null || true
         if [ -d /tmp/grub-theme-vimix-master/theme ]; then
@@ -171,9 +178,9 @@ function build_image() {
     else
         echo "Warning: Failed to download Vimix theme, using fallback text theme"
         cat <<'THEME_EOF' > /boot/grub/themes/vimix/theme.txt
-# Simple text-based GRUB theme for Uksus OS
+# Simple text-based GRUB theme for RisOS 26.27
 desktop-color: "#1a1a2e"
-title-text: "Uksus OS Boot Menu"
+title-text: "RisOS 26.27 Boot Menu"
 title-font: "DejaVu Sans Bold 32"
 title-color: "#e94560"
 message-font: "DejaVu Sans 16"
@@ -187,16 +194,22 @@ selected_item_bgcolor: "#0f3460"
 THEME_EOF
     fi
 
+    # Copy RisOS logo to GRUB theme if available
+    if [ -f /usr/share/risos/icons/risos-logo.png ]; then
+        cp /usr/share/risos/icons/risos-logo.png /boot/grub/themes/vimix/risos-logo.png
+        echo "RisOS logo copied to GRUB theme."
+    fi
+
     # copy kernel files (safe glob for Noble)
     KERNEL=$(ls /boot/vmlinuz-*-generic 2>/dev/null | head -n1)
     INITRD=$(ls /boot/initrd.img-*-generic 2>/dev/null | head -n1)
-    
+
     if [ -z "$KERNEL" ] || [ -z "$INITRD" ]; then
         echo "ERROR: Kernel or initrd not found in /boot!" >&2
         ls -la /boot/ >&2
         exit 1
     fi
-    
+
     cp "$KERNEL" casper/vmlinuz
     cp "$INITRD" casper/initrd
 
@@ -209,7 +222,7 @@ THEME_EOF
         echo "Warning: Could not download memtest86+, skipping."
     fi
 
-    # grub.cfg with theme support
+    # grub.cfg with theme support and RisOS branding
     touch ubuntu
     cat <<EOF > isolinux/grub.cfg
 search --set=root --file /ubuntu
@@ -226,12 +239,12 @@ fi
 set default="0"
 set timeout=30
 
-menuentry "Try Uksus OS without installing" {
+menuentry "Try RisOS 26.27 without installing" {
     linux /casper/vmlinuz boot=casper nopersistent toram quiet splash ---
     initrd /casper/initrd
 }
 
-menuentry "Install Uksus OS" {
+menuentry "Install RisOS 26.27" {
     linux /casper/vmlinuz boot=casper only-ubiquity quiet splash ---
     initrd /casper/initrd
 }
