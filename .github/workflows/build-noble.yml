@@ -1,28 +1,31 @@
-name: build-noble
-
+name: build-risos-noble
 on:
   push:
-    branches: [ master, uksus-branding ]
+    branches: [ master ]
   pull_request:
     branches: [ master ]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       
-      - name: Build
+      - name: Build RisOS ISO
         run: |
           cd scripts
-          sed -i -E 's/TARGET_UBUNTU_VERSION=(.*)/TARGET_UBUNTU_VERSION="noble"/g' default_config.sh
-          ./build.sh -
+          # Убедимся, что версия Noble и имя risos
+          sed -i 's/TARGET_UBUNTU_VERSION=.*/TARGET_UBUNTU_VERSION="noble"/' default_config.sh
+          sed -i 's/TARGET_NAME=.*/TARGET_NAME="risos"/' default_config.sh
           
-      - name: Archive artifacts
+          # Запускаем сборку с sudo (так как нужен root для debootstrap/chroot)
+          sudo ./build.sh -
+          
+      - name: Archive RisOS ISO
         uses: actions/upload-artifact@v4
         with:
-          name: uksus-os
+          name: risos-26.27-iso
           path: |
-            scripts/uksus-os.iso
+            scripts/risos.iso
             scripts/image/md5sum.txt
