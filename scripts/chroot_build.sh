@@ -83,7 +83,6 @@ function install_pkg() {
     echo "=====> running install_pkg ... will take a long time ..."
     apt-get -y upgrade
 
-    # install live packages + wget for theme downloading
     apt-get install -y \
         sudo \
         ubuntu-standard \
@@ -117,10 +116,8 @@ function install_pkg() {
             ;;
     esac
 
-    # install kernel
     apt-get install -y --no-install-recommends $TARGET_KERNEL_PACKAGE
 
-    # graphic installer - ubiquity
     apt-get install -y \
         ubiquity \
         ubiquity-casper \
@@ -128,23 +125,11 @@ function install_pkg() {
         ubiquity-slideshow-ubuntu \
         ubiquity-ubuntu-artwork
 
-    # Call into config function
     customize_image
 
-    # === RisOS Branding in Ubiquity Slideshow ===
-    SLIDESHOW_DIR="/usr/share/ubiquity-slideshow/slides/ubuntu"
-    if [ -d "$SLIDESHOW_DIR" ]; then
-        find "$SLIDESHOW_DIR" -name "*.html" -exec sed -i 's/Ubuntu/RisOS 26.27/g' {} \;
-        find "$SLIDESHOW_DIR" -name "*.html" -exec sed -i 's/ubuntu/risos/g' {} \;
-    fi
-
-    # remove unused and clean up apt cache
     apt-get autoremove -y
-
-    # final touch
     dpkg-reconfigure locales
 
-    # network manager
     cat <<EOF > /etc/NetworkManager/NetworkManager.conf
 [main]
 rc-manager=none
@@ -164,41 +149,40 @@ function build_image() {
     mkdir -p /image/{casper,isolinux,install}
     pushd /image
 
-    # === GRUB THEME INSTALLATION (Vimix) ===
-    echo "=====> Installing GRUB theme Vimix ..."
+    # === GRUB THEME: Black background + RisOS Logo ===
+    echo "=====> Configuring GRUB theme for RisOS 26.27 ..."
     mkdir -p /boot/grub/themes/vimix
 
-    if wget -q --timeout=30 https://github.com/VandalByte/grub-theme-vimix/archive/refs/heads/master.tar.gz -O /tmp/vimix.tar.gz; then
-        tar xzf /tmp/vimix.tar.gz -C /tmp/ --strip-components=1 2>/dev/null || true
-        if [ -d /tmp/grub-theme-vimix-master/theme ]; then
-            cp -r /tmp/grub-theme-vimix-master/theme/* /boot/grub/themes/vimix/
-            echo "Vimix theme installed successfully."
-        fi
-        rm -rf /tmp/grub-theme-vimix-master /tmp/vimix.tar.gz
+    if [ -f /root/risos-logo.png ]; then
+        cp /root/risos-logo.png /boot/grub/themes/vimix/risos-logo.png
+        echo "RisOS logo copied to GRUB theme."
     else
-        echo "Warning: Failed to download Vimix theme, using fallback text theme"
-        cat <<'THEME_EOF' > /boot/grub/themes/vimix/theme.txt
-# Simple text-based GRUB theme for RisOS 26.27
-desktop-color: "#1a1a2e"
-title-text: "RisOS 26.27 Boot Menu"
-title-font: "DejaVu Sans Bold 32"
-title-color: "#e94560"
+        echo "WARNING: risos-logo.png not found for GRUB!"
+    fi
+
+    cat <<'THEME_EOF' > /boot/grub/themes/vimix/theme.txt
+# RisOS 26.27 GRUB Theme - Black with centered logo
+desktop-color: "#000000"
+title-text: ""
 message-font: "DejaVu Sans 16"
 message-color: "#ffffff"
 terminal-font: "DejaVu Sans Mono 14"
-menu-bgcolor: "#16213e"
+menu-bgcolor: "#000000"
+menu-border-color: "#333333"
 item-font: "DejaVu Sans 18"
-item-color: "#a8a8b3"
+item-color: "#cccccc"
 selected_item_color: "#e94560"
-selected_item_bgcolor: "#0f3460"
-THEME_EOF
-    fi
+selected_item_bgcolor: "#1a1a2e"
 
-    # Copy RisOS logo to GRUB theme if available
-    if [ -f /usr/share/risos/icons/risos-logo.png ]; then
-        cp /usr/share/risos/icons/risos-logo.png /boot/grub/themes/vimix/risos-logo.png
-        echo "RisOS logo copied to GRUB theme."
-    fi
+# Centered RisOS Logo
++ image {
+    left = 50%-128
+    top = 10%
+    width = 256
+    height = 256
+    file = "risos-logo.png"
+}
+THEME_EOF
 
     # copy kernel files (safe glob for Noble)
     KERNEL=$(ls /boot/vmlinuz-*-generic 2>/dev/null | head -n1)
@@ -206,7 +190,6 @@ THEME_EOF
 
     if [ -z "$KERNEL" ] || [ -z "$INITRD" ]; then
         echo "ERROR: Kernel or initrd not found in /boot!" >&2
-        ls -la /boot/ >&2
         exit 1
     fi
 
@@ -218,11 +201,8 @@ THEME_EOF
         unzip -p install/memtest86.zip memtest64.bin > install/memtest86+.bin 2>/dev/null || true
         unzip -p install/memtest86.zip memtest64.efi > install/memtest86+.efi 2>/dev/null || true
         rm -f install/memtest86.zip
-    else
-        echo "Warning: Could not download memtest86+, skipping."
     fi
 
-    # grub.cfg with theme support and RisOS branding
     touch ubuntu
     cat <<EOF > isolinux/grub.cfg
 search --set=root --file /ubuntu
@@ -230,7 +210,6 @@ insmod all_video
 insmod png
 insmod jpeg
 
-# Apply Vimix theme if available
 if [ -f /boot/grub/themes/vimix/theme.txt ]; then
     set theme=/boot/grub/themes/vimix/theme.txt
     export theme
@@ -273,14 +252,12 @@ else
 fi
 EOF
 
-    # generate manifest
     dpkg-query -W --showformat='${Package} ${Version}\n' | tee casper/filesystem.manifest
     cp -v casper/filesystem.manifest casper/filesystem.manifest-desktop
     for pkg in $TARGET_PACKAGE_REMOVE; do
         sed -i "/$pkg/d" casper/filesystem.manifest-desktop
     done
 
-    # create diskdefines
     cat <<EOF > README.diskdefines
 #define DISKNAME  ${GRUB_LIVEBOOT_LABEL}
 #define TYPE  binary
@@ -293,21 +270,18 @@ EOF
 #define TOTALNUM0  1
 EOF
 
-    # copy EFI loaders (Noble-compatible safe search)
     SHIM_EFI=$(find /usr/lib/shim -name "shimx64.efi.signed*" 2>/dev/null | head -n1)
     if [ -z "$SHIM_EFI" ]; then
         echo "ERROR: shimx64.efi not found!" >&2
-        find /usr/lib/shim -type f 2>/dev/null >&2
         exit 1
     fi
     cp "$SHIM_EFI" isolinux/bootx64.efi
 
-    [ -f /usr/lib/shim/mmx64.efi ] && cp /usr/lib/shim/mmx64.efi isolinux/mmx64.efi || echo "Warning: mmx64.efi not found"
+    [ -f /usr/lib/shim/mmx64.efi ] && cp /usr/lib/shim/mmx64.efi isolinux/mmx64.efi || true
 
     GRUB_EFI=$(find /usr/lib/grub/x86_64-efi-signed -name "grubx64.efi.signed" 2>/dev/null | head -n1)
-    [ -n "$GRUB_EFI" ] && cp "$GRUB_EFI" isolinux/grubx64.efi || echo "Warning: grubx64.efi.signed not found"
+    [ -n "$GRUB_EFI" ] && cp "$GRUB_EFI" isolinux/grubx64.efi || true
 
-    # create a FAT16 UEFI boot disk image containing the EFI bootloaders
     (
         cd isolinux && \
         dd if=/dev/zero of=efiboot.img bs=1M count=10 && \
@@ -319,7 +293,6 @@ EOF
         LC_CTYPE=C mcopy -i efiboot.img ./grub.cfg ::efi/ubuntu/grub.cfg
     )
 
-    # create a grub BIOS image
     grub-mkstandalone \
         --format=i386-pc \
         --output=isolinux/core.img \
@@ -329,13 +302,11 @@ EOF
         --fonts="" \
         "boot/grub/grub.cfg=isolinux/grub.cfg"
 
-    # combine a bootable Grub cdboot.img
     cat /usr/lib/grub/i386-pc/cdboot.img isolinux/core.img > isolinux/bios.img
 
-    # generate md5sum.txt
     /bin/bash -c "(find . -type f -print0 | xargs -0 md5sum | grep -v -e 'isolinux' > md5sum.txt)"
 
-    popd # return initial directory
+    popd
 }
 
 function finish_up() {
@@ -350,10 +321,8 @@ function finish_up() {
 load_config
 check_host
 
-# check number of args
 if [[ $# == 0 || $# > 3 ]]; then help; fi
 
-# loop through args
 dash_flag=false
 start_index=0
 end_index=${#CMD[*]}
@@ -375,7 +344,6 @@ if [[ $dash_flag == false ]]; then
     end_index=$(($start_index + 1))
 fi
 
-# loop through the commands
 for ((ii=$start_index; ii<$end_index; ii++)); do
     ${CMD[ii]}
 done
