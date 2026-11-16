@@ -1,5 +1,4 @@
-name: build-bionic
-
+name: build-risos-noble
 on:
   push:
     branches: [ master ]
@@ -9,20 +8,24 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest 
-
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Build
+      - uses: actions/checkout@v4
+      
+      - name: Build RisOS ISO
         run: |
           cd scripts
-          sed -i -E 's/TARGET_UBUNTU_VERSION=(.*)/TARGET_UBUNTU_VERSION="bionic"/g' default_config.sh
-          ./build.sh -
-      - name: Archive artifacts
+          # Убедимся, что версия Noble и имя risos
+          sed -i 's/TARGET_UBUNTU_VERSION=.*/TARGET_UBUNTU_VERSION="noble"/' default_config.sh
+          sed -i 's/TARGET_NAME=.*/TARGET_NAME="risos"/' default_config.sh
+          
+          # Запускаем сборку с sudo (так как нужен root для debootstrap/chroot)
+          sudo ./build.sh -
+          
+      - name: Archive RisOS ISO
         uses: actions/upload-artifact@v4
         with:
-          name: ubuntu-from-scratch
+          name: risos-26.27-iso
           path: |
-            scripts/ubuntu-from-scratch.iso
+            scripts/risos.iso
             scripts/image/md5sum.txt
