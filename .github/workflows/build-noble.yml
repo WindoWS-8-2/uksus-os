@@ -1,5 +1,4 @@
-name: build-noble
-
+name: build-risos-noble
 on:
   push:
     branches: [ master ]
@@ -9,20 +8,25 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       
-      - name: Build
+      - name: Build RisOS ISO
         run: |
           cd scripts
-          sed -i -E 's/TARGET_UBUNTU_VERSION=(.*)/TARGET_UBUNTU_VERSION="noble"/g' default_config.sh
+          # Убедимся, что версия Noble и имя risos
+          sed -i 's/TARGET_UBUNTU_VERSION=.*/TARGET_UBUNTU_VERSION="noble"/' default_config.sh
+          sed -i 's/TARGET_NAME=.*/TARGET_NAME="risos"/' default_config.sh
+          
+          # Делаем скрипты исполняемыми и запускаем
+          chmod +x build.sh chroot_build.sh
           ./build.sh -
           
-      - name: Archive artifacts
+      - name: Archive RisOS ISO
         uses: actions/upload-artifact@v4
         with:
-          name: uksus-os
+          name: risos-26.27-iso
           path: |
-            scripts/uksus-os.iso
+            scripts/risos.iso
             scripts/image/md5sum.txt
