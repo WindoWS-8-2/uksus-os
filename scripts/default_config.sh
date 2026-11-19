@@ -47,8 +47,11 @@ Pin: release o=LP-PPA-mozillateam
 Pin-Priority: 1001
 EOF
     
+    # Создаем папку, если её нет, чтобы избежать ошибки "No such file or directory"
+    mkdir -p /etc/apt/update-manager/release-upgrades.d/
+    
     # Разрешаем автоматические обновления из этого PPA
-    echo 'Unattended-Upgrade::Allowed-Origins:: "LP-PPA-mozillateam:${distro_codename}";' | tee /etc/apt/update-manager/release-upgrades.d/allow-mozillateam.cfg > /dev/null
+    echo 'Unattended-Upgrade::Allowed-Origins:: "LP-PPA-mozillateam:${distro_codename}";' > /etc/apt/update-manager/release-upgrades.d/allow-mozillateam.cfg
 
     # install graphics and desktop (Noble compatible)
     apt-get install -y \
