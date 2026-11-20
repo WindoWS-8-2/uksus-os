@@ -91,12 +91,37 @@ DISTRIB_CODENAME=noble
 DISTRIB_DESCRIPTION="RisOS 26.27 LTS"
 EOF
 
-    sed -i 's/^NAME=.*/NAME="RisOS"/' /etc/os-release
-    sed -i 's/^VERSION=.*/VERSION="26.27 LTS"/' /etc/os-release
-    sed -i 's/^PRETTY_NAME=.*/PRETTY_NAME="RisOS 26.27 LTS"/' /etc/os-release
-    sed -i 's/^ID=.*/ID=risos/' /etc/os-release
-    sed -i 's|^HOME_URL=.*|HOME_URL="https://risos.org"|' /etc/os-release
-    
+    # Полностью переписываем /etc/os-release, чтобы нигде не осталось упоминаний Ubuntu
+    # (это файл, из которого раздел "О системе" в параметрах устройства берёт данные)
+    cat <<EOF > /etc/os-release
+NAME="RisOS"
+VERSION="26.27 LTS"
+ID=risos
+ID_LIKE=ubuntu
+PRETTY_NAME="RisOS 26.27 LTS"
+LOGO=ubuntu-logo
+HOME_URL="https://risos.org"
+SUPPORT_URL="https://risos.org/support"
+BUG_REPORT_URL="https://risos.org/bugs"
+PRIVACY_POLICY_URL="https://risos.org/legal/terms-and-policies/privacy-policy"
+VERSION_CODENAME=noble
+UBUNTU_CODENAME=noble
+EOF
+
+    # /usr/lib/os-release используется некоторыми приложениями вместо /etc/os-release
+    if [ -f /usr/lib/os-release ]; then
+        cp /etc/os-release /usr/lib/os-release
+    fi
+
+    # GNOME «О системе» (gnome-control-center info panel) показывает поле
+    # "Образ"/"Image" из /etc/image-id, где Ubuntu указано по умолчанию
+    cat <<EOF > /etc/image-id
+image_id="RisOS:26.27:noble"
+image_version="26.27"
+image_date="$(date -u +%Y%m%d)"
+END
+EOF
+
     echo "risos" > /etc/hostname
 
     # === Replace Icons (Start Menu & Ubiquity) ===
@@ -135,6 +160,37 @@ EOF
         find "$SLIDESHOW_DIR" -name "*.html" -exec sed -i 's/Ubuntu/RisOS 26.27/g' {} \;
         find "$SLIDESHOW_DIR" -name "*.html" -exec sed -i 's/ubuntu/risos/g' {} \;
     fi
+
+    # === Replace "Ubuntu" branding in other user-visible places ===
+    # 1. MOTD-и и приветственные скрипты (в терминале при входе пишется
+    #    "Welcome to Ubuntu ..." из /etc/update-motd.d/00-header)
+    if [ -d /etc/update-motd.d ]; then
+        find /etc/update-motd.d -type f -exec sed -i 's/Ubuntu/RisOS 26.27/g; s/ubuntu/risos/g' {} \;
+    fi
+    [ -f /etc/motd ] && sed -i 's/Ubuntu/RisOS 26.27/g; s/ubuntu/risos/g' /etc/motd || true
+    [ -f /etc/issue ] && sed -i 's/Ubuntu/RisOS 26.27/g; s/ubuntu/risos/g' /etc/issue || true
+    [ -f /etc/issue.net ] && sed -i 's/Ubuntu/RisOS 26.27/g; s/ubuntu/risos/g' /etc/issue.net || true
+
+    # 2. Splash-экран Plymouth (надпись "Ubuntu" при загрузке)
+    for PLYMOUTH_CONF in /usr/share/plymouth/themes/ubuntu-logo/ubuntu-logo.script \
+                         /usr/share/plymouth/themes/ubuntu-logo/ubuntu.plymouth; do
+        [ -f "$PLYMOUTH_CONF" ] && sed -i 's/Ubuntu/RisOS/g' "$PLYMOUTH_CONF" || true
+    done
+
+    # 3. dconf-профиль Ubuntu (gnome-initial-setup, экран приветствия и
+    #    некоторые настройки по умолчанию содержат текст "Ubuntu")
+    if [ -d /etc/dconf/db ]; then
+        find /etc/dconf -type f -exec sed -i "s/'Ubuntu'/'RisOS 26.27'/g" {} \;
+        if command -v dconf >/dev/null 2>&1; then
+            dconf update || true
+        fi
+    fi
+
+    # 4. Ярлыки приложений, упоминающие Ubuntu в названиях/комментариях
+    #    (например "Ubuntu Software" в меню приложений)
+    find /usr/share/applications -name "*.desktop" -type f 2>/dev/null | while read -r desk; do
+        sed -i '/^Name=/s/Ubuntu/RisOS 26.27/g; /^Comment=/s/Ubuntu/RisOS 26.27/g' "$desk"
+    done
 
     # purge unnecessary packages
     apt-get purge -y \
