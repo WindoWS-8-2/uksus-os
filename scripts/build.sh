@@ -11,7 +11,9 @@ function help() {
         echo -e "This script builds a bootable RisOS 26.27 ISO image"
         echo -e
     else
-        echo -e $1
+        # SECURITY: quote and use printf - `echo -e $1` performed word
+        # splitting and escape interpretation on untrusted input.
+        printf '%b\n' "$1"
         echo
     fi
     echo -e "Supported commands : ${CMD[*]}"
@@ -79,9 +81,23 @@ function load_config() {
 
 function check_config() {
     local expected_config_version
-    expected_config_version="0.4"
+    expected_config_version="0.5"
     if [[ "$CONFIG_FILE_VERSION" != "$expected_config_version" ]]; then
         >&2 echo "Invalid or old config version $CONFIG_FILE_VERSION, expected $expected_config_version. Please update your configuration file from the default."
+        exit 1
+    fi
+
+    # SECURITY: fail fast on unsafe build parameters before anything is run
+    # with root privileges. A plain-HTTP mirror allows a network attacker to
+    # MITM debootstrap/apt and inject malicious packages into the ISO.
+    if [[ ! "${TARGET_UBUNTU_MIRROR:-}" =~ ^https:// ]]; then
+        >&2 echo "ERROR: TARGET_UBUNTU_MIRROR must use HTTPS (got: ${TARGET_UBUNTU_MIRROR:-unset}). Aborting for security reasons."
+        exit 1
+    fi
+    # SECURITY: restrict the codename to a safe charset so it cannot be used
+    # to inject extra apt/debootstrap options or sources.list lines.
+    if [[ ! "${TARGET_UBUNTU_VERSION:-}" =~ ^[a-z]+$ ]]; then
+        >&2 echo "ERROR: invalid TARGET_UBUNTU_VERSION: ${TARGET_UBUNTU_VERSION:-unset}"
         exit 1
     fi
 }
@@ -209,7 +225,15 @@ do
         dash_flag=true
         continue
     fi
-    find_index $ii
+    # SECURITY: validate the argument against the known command whitelist
+    # before using it. The old code called `find_index $ii` unquoted and then
+    # executed `${CMD[ii]}`, so an attacker-controlled argument (e.g. one
+    # containing shell metacharacters or a subshell) could lead to arbitrary
+    # code execution as root inside the chroot build pipeline.
+    if ! printf '%s\n' "${CMD[@]}" | grep -Fxq -- "$ii"; then
+        help "Command not found : $ii"
+    fi
+    find_index "$ii"
     if [[ $dash_flag == false ]]; then
         start_index=$index
     else

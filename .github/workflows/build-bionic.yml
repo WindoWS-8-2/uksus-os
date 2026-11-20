@@ -19,8 +19,8 @@ jobs:
           sed -i 's/TARGET_UBUNTU_VERSION=.*/TARGET_UBUNTU_VERSION="noble"/' default_config.sh
           sed -i 's/TARGET_NAME=.*/TARGET_NAME="risos"/' default_config.sh
           
-          # Запускаем сборку с sudo (так как нужен root для debootstrap/chroot)
-          sudo ./build.sh -
+          # Запускаем сборку (build.sh сам вызывает sudo для привилегированных шагов)
+          ./build.sh -
           
       - name: Archive RisOS ISO
         uses: actions/upload-artifact@v4

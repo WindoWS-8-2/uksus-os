@@ -100,7 +100,7 @@ mkdir $HOME/live-ubuntu-from-scratch
      --variant=minbase \
      noble \
      $HOME/live-ubuntu-from-scratch/chroot \
-     http://us.archive.ubuntu.com/ubuntu/
+     https://us.archive.ubuntu.com/ubuntu/
   ```
   
   > **debootstrap** is used to create a Debian base system from scratch, without requiring the availability of **dpkg** or **apt**. It does this by downloading .deb files from a mirror site, and carefully unpacking them into a directory which can eventually be **chrooted** into.
@@ -155,14 +155,14 @@ From this point we will be configuring the `live system`.
 
    ```shell
    cat <<EOF > /etc/apt/sources.list
-   deb http://us.archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
-   deb-src http://us.archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
+   deb https://us.archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
+   deb-src https://us.archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
 
-   deb http://us.archive.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
-   deb-src http://us.archive.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
+   deb https://us.archive.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
+   deb-src https://us.archive.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
 
-   deb http://us.archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
-   deb-src http://us.archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
+   deb https://us.archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
+   deb-src https://us.archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
    EOF
    ```
 

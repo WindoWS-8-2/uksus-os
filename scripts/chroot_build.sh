@@ -48,6 +48,20 @@ function check_host() {
 
 function setup_host() {
     echo "=====> running setup_host ..."
+    # SECURITY: force HTTPS for the archive mirror. A plain-HTTP mirror lets a
+    # network attacker perform a MITM attack and inject malicious packages
+    # into the built image. Fail hard instead of silently downgrading.
+    if [[ ! "$TARGET_UBUNTU_MIRROR" =~ ^https:// ]]; then
+        echo "ERROR: TARGET_UBUNTU_MIRROR must use HTTPS (got: $TARGET_UBUNTU_MIRROR)." >&2
+        echo "Refusing to build an image over an unencrypted mirror." >&2
+        exit 1
+    fi
+    # SECURITY: validate the codename against a conservative charset so it
+    # cannot be used to inject extra apt sources.list lines / options.
+    if [[ ! "$TARGET_UBUNTU_VERSION" =~ ^[a-z]+$ ]]; then
+        echo "ERROR: invalid TARGET_UBUNTU_VERSION: $TARGET_UBUNTU_VERSION" >&2
+        exit 1
+    fi
     cat <<EOF > /etc/apt/sources.list
 deb $TARGET_UBUNTU_MIRROR $TARGET_UBUNTU_VERSION main restricted universe multiverse
 deb-src $TARGET_UBUNTU_MIRROR $TARGET_UBUNTU_VERSION main restricted universe multiverse
@@ -197,10 +211,22 @@ THEME_EOF
     cp "$INITRD" casper/initrd
 
     # memtest86+ v7.20
-    if wget -q --timeout=30 https://memtest.org/download/v7.20/mt86plus_7.20.binaries.zip -O install/memtest86.zip; then
-        unzip -p install/memtest86.zip memtest64.bin > install/memtest86+.bin 2>/dev/null || true
-        unzip -p install/memtest86.zip memtest64.efi > install/memtest86+.efi 2>/dev/null || true
+    # SECURITY: the archive is verified against its pinned SHA-256 checksum
+    # before being unpacked into the ISO, so a compromised/redirected mirror or
+    # a malicious server response cannot inject code into the produced image.
+    MEMTEST_URL="https://memtest.org/download/v7.20/mt86plus_7.20.binaries.zip"
+    MEMTEST_SHA256="8aa81b2ac218f4848af4c1a6cff1c1a8a6cdfa884f37c426b8185894b65f09c3"
+    if command -v sha256sum >/dev/null 2>&1; then
+        if wget -q --timeout=30 --tries=1 "$MEMTEST_URL" -O install/memtest86.zip && \
+           echo "${MEMTEST_SHA256}  install/memtest86.zip" | sha256sum --check --status; then
+            unzip -p install/memtest86.zip memtest64.bin > install/memtest86+.bin 2>/dev/null || true
+            unzip -p install/memtest86.zip memtest64.efi > install/memtest86+.efi 2>/dev/null || true
+        else
+            echo "WARNING: memtest86+ download failed or checksum mismatch - skipping it." >&2
+        fi
         rm -f install/memtest86.zip
+    else
+        echo "WARNING: sha256sum not available, skipping unverified memtest86+ download." >&2
     fi
 
     touch ubuntu
@@ -255,7 +281,14 @@ EOF
     dpkg-query -W --showformat='${Package} ${Version}\n' | tee casper/filesystem.manifest
     cp -v casper/filesystem.manifest casper/filesystem.manifest-desktop
     for pkg in $TARGET_PACKAGE_REMOVE; do
-        sed -i "/$pkg/d" casper/filesystem.manifest-desktop
+        # SECURITY: sanitize the package name before interpolating it into a
+        # sed regex. A crafted config value (e.g. `.*` or `/d;...`) could
+        # otherwise wipe or corrupt every line of the manifest.
+        if [[ ! "$pkg" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
+            echo "WARNING: skipping invalid package name in TARGET_PACKAGE_REMOVE: $pkg" >&2
+            continue
+        fi
+        sed -i "/^${pkg} /d" casper/filesystem.manifest-desktop
     done
 
     cat <<EOF > README.diskdefines
@@ -332,7 +365,15 @@ do
         dash_flag=true
         continue
     fi
-    find_index $ii
+    # SECURITY: validate the argument against the known command whitelist
+    # before using it. The old code called `find_index $ii` unquoted and then
+    # executed `${CMD[ii]}`, so an attacker-controlled argument (e.g. one
+    # containing shell metacharacters or a subshell) could lead to arbitrary
+    # root code execution inside the chroot.
+    if ! printf '%s\n' "${CMD[@]}" | grep -Fxq -- "$ii"; then
+        help "Command not found : $ii"
+    fi
+    find_index "$ii"
     if [[ $dash_flag == false ]]; then
         start_index=$index
     else

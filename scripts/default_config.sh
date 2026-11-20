@@ -8,7 +8,9 @@
 export TARGET_UBUNTU_VERSION="noble"
 
 # The Ubuntu Mirror URL. It's better to change for faster download.
-export TARGET_UBUNTU_MIRROR="http://archive.ubuntu.com/ubuntu/"
+# SECURITY: HTTPS is mandatory - plain HTTP allows man-in-the-middle attackers
+# to substitute malicious .deb packages during debootstrap/apt operations.
+export TARGET_UBUNTU_MIRROR="https://archive.ubuntu.com/ubuntu/"
 
 # The packaged version of the Linux kernel to install on target image.
 export TARGET_KERNEL_PACKAGE="linux-generic"
@@ -147,4 +149,4 @@ EOF
 
 # Used to version the configuration. If breaking changes occur, manual
 # updates to this file from the default may be necessary.
-export CONFIG_FILE_VERSION="0.4"
+export CONFIG_FILE_VERSION="0.5"
